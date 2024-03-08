@@ -8,18 +8,37 @@ from uuid import uuid4
 
 from snakemake.utils import read_job_properties
 
+import os
+import shutil
+import glob
+
+# Find the latest file matching the pattern /tmp/krb5cc_$UID*
+kt_files = sorted(glob.glob(f'/tmp/krb5cc_{os.getuid()}*'), key=os.path.getctime, reverse=True)
+if kt_files:
+    latest_kt = kt_files[0]
+    shutil.copy(latest_kt, ".ticket")
+else:
+    print("No Kerberos ticket cache found.")
 
 jobscript = sys.argv[1]
 job_properties = read_job_properties(jobscript)
 
 UUID = uuid4()  # random UUID
-jobDir = "{{cookiecutter.htcondor_log_dir}}/{}_{}".format(job_properties["jobid"], UUID)
+jobDir = "/home/users/REPLACETHIS/.condor_jobs/{}_{}".format(job_properties["jobid"], UUID)
 makedirs(jobDir, exist_ok=True)
+
 
 sub = htcondor.Submit(
     {
-        "executable": "/bin/bash",
-        "arguments": jobscript,
+        "executable": jobscript,
+#        "executable": "/bin/bash",
+#        "arguments": jobscript,
+        "transfer_input_files" : '.ticket',
+#        "transfer_input_files" : '.ticket '.join(job_properties['input']),
+#        "transfer_output_files" : ' '.join(job_properties['output']),
+#        "should_transfer_files" : True,
+#        "preserve_relative_paths" : True,
+        "Requirements" : "OpSysMajorVer == 11",
         "max_retries": "5",
         "log": join(jobDir, "condor.log"),
         "output": join(jobDir, "condor.out"),
@@ -28,6 +47,7 @@ sub = htcondor.Submit(
         "request_cpus": str(job_properties["threads"]),
     }
 )
+
 
 request_memory = job_properties["resources"].get("mem_mb", None)
 if request_memory is not None:
